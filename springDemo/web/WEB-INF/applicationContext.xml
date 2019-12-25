@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:aop="http://www.springframework.org/schema/aop"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:tx="http://www.springframework.org/schema/tx"
+       xmlns:myname="http://www.springDemo.com/schema/user"
+       xmlns:mybatis="http://mybatis.org/schema/mybatis-spring"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+        http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+         http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+          http://www.springDemo.com/schema/user http://www.springDemo.com/schema/user.xsd
+           http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+           http://mybatis.org/schema/mybatis-spring http://mybatis.org/schema/mybatis-spring.xsd ">
+    <bean name="source" class="com.springDemo.beans.Source">
+        <!--控制反转-->
+        <property name="type" value="橙子" />
+        <property name="sugar" value="少糖" />
+        <property name="size" value="大杯" />
+    </bean>
+
+    <!--自定义标签-->
+    <myname:user id="testBean" name="aaa" email="bbbb" />
+
+    <bean name="drinkMaker" class="com.springDemo.beans.DrinkMaker">
+        <!--依赖注入-->
+        <property name="source" ref="source" />
+    </bean>
+
+    <bean name="aopService" class="com.springDemo.service.AopService" />
+
+    <bean name="loggerAspect" class="com.springDemo.common.aop.LoggerAspect" />
+
+    <bean name="loggerAroundAspect" class="com.springDemo.common.aop.LoggerAroundAspect" />
+
+    <!--监听类-->
+    <bean name="testListener" class="com.springDemo.common.eventListener.TestListener" />
+
+    <!--xml定义切面的方式-->
+    <!--切面使用必须引入aspectjweaver.jar才能使用（1.9.2版本以下的）-->
+    <aop:config>
+        <!-- where：在哪些地方（包.类.方法）做增加 -->
+        <aop:pointcut id="loggerPointcut" expression="execution(* com.springDemo.service.AopService.*(..))"/>
+        <!-- what:做什么增强 -->
+        <aop:aspect id="logAspect" ref="loggerAspect">
+            <!-- when:在什么时机（方法前/后/前后） -->
+            <aop:before method="logBefore" pointcut-ref="loggerPointcut" />
+            <aop:after method="logAfter" pointcut-ref="loggerPointcut" />
+            <aop:after-returning method="logReturn" pointcut-ref="loggerPointcut" />
+            <aop:after-throwing method="logThrow" pointcut-ref="loggerPointcut" />
+        </aop:aspect>
+        <aop:aspect id="logAspect" ref="loggerAroundAspect">
+            <!-- 环绕通知是覆盖原先的方法，必须有切面中去主动调用方法才会执行 -->
+            <aop:around method="logAround" pointcut-ref="loggerPointcut" />
+        </aop:aspect>
+    </aop:config>
+    <!--xml定义切面的方式-->
+
+    <!--扫描具有@Component注解定义的bean-->
+    <context:component-scan base-package="com.springDemo.common.aop" />
+    <!--开启aop切面注解，通过注解方式-->
+    <aop:aspectj-autoproxy/>
+
+    <!--读取配置文件-->
+    <context:property-placeholder location="classpath:resource/application.properties" />
+    <!--datasource：第一种-->
+    <bean id="dataSource" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+        <property name="driverClassName" value="${dataSource.jdbc.driverClassName}" />
+        <property name="url" value="${dataSource.jdbc.url}" />
+        <property name="username" value="${dataSource.jdbc.username}" />
+        <property name="password" value="${dataSource.jdbc.password}" />
+    </bean>
+
+    <!--dbcp：第二种-->
+    <bean id="dataSource2" class="org.apache.commons.dbcp2.BasicDataSource">
+        <property name="driverClassName" value="${dataSource.jdbc.driverClassName}" />
+        <property name="url" value="${dataSource.jdbc.url}" />
+        <property name="username" value="${dataSource.jdbc.username}" />
+        <property name="password" value="${dataSource.jdbc.password}" />
+    </bean>
+
+    <bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+
+    <!--整合MyBatis配置-->
+    <bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+        <property name="dataSource" ref="dataSource" />
+        <property name="mapperLocations" value = "classpath*:com/springDemo/mapper/TestMapper.xml" />
+    </bean>
+
+    <!-- 扫描mybatis映射接口类 -->
+    <bean id="mapperScannerConfigurer" class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+        <property name="basePackage" value="com.springDemo.mapper"/>
+    </bean>
+
+    <bean id="MyBatisServiceImpl" class="com.springDemo.service.Impl.MyBatisServiceImpl" />
+
+    <bean id="jdbcServiceImpl" class="com.springDemo.service.Impl.JdbcServiceImpl" />
+
+    <!--事务管理器-->
+    <bean id="tm" class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+        <property name="dataSource" ref="dataSource" />
+    </bean>
+    <!--事务通知配置-->
+    <tx:advice id="txAdvice" transaction-manager="tm">
+        <!-- 以方法为单位,指定方法应用什么事务属性
+                isolation:隔离级别
+                propagation:传播行为
+                read-only:是否只读
+             -->
+        <tx:attributes>
+            <tx:method name="transfer" isolation="DEFAULT" propagation="REQUIRED" read-only="false"/>
+            <!--上面的方式只适用单个方法，当我们业务有很多个方法都要操作事务时，则要配置很多个，可以使用下面的通配符配置方式-->
+            <tx:method name="save*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="persist*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="update*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="modify*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="delete*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="remove*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="false" />
+            <tx:method name="get*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="true" />
+            <tx:method name="find*" isolation="REPEATABLE_READ" propagation="REQUIRED" read-only="true" />
+        </tx:attributes>
+    </tx:advice>
+    <!--事务切面-->
+    <aop:config>
+        <aop:pointcut id="txPc" expression="execution(* com.springDemo.service.Impl.*ServiceImpl.*(..))"/>
+        <!--配置切面-->
+        <aop:advisor advice-ref="txAdvice" pointcut-ref="txPc"/>
+    </aop:config>
+
+    <!--rmi服务端配置-->
+    <bean id="helloRmiServiceImpl" class="com.springDemo.service.Impl.HelloRmiServiceImpl" />
+    <!--<bean id="myRmi" class="org.springframework.remoting.rmi.RmiServiceExporter" >
+        &lt;!&ndash;服务类&ndash;&gt;
+        <property name="service" ref="helloRmiServiceImpl" />
+        &lt;!&ndash;服务名&ndash;&gt;
+        <property name="serviceName" value="helloRmi" />
+        &lt;!&ndash;服务接口&ndash;&gt;
+        <property name="serviceInterface" value="com.springDemo.service.RmiService" />
+        &lt;!&ndash;服务端口&ndash;&gt;
+        <property name="registryPort" value="9090" />
+    </bean>-->
+
+
+</beans>
